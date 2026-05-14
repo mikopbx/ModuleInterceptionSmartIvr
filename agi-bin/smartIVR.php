@@ -60,14 +60,22 @@ function getExtensionStatus($agi, $number): int
 
 function getDialStatus($agi)
 {
-    $chan       = $agi->get_variable('MASTER_CHANNEL(CHANNEL)', true);
-    $am         = Util::getAstManager();
-    $DialStatus = $am->GetVar($chan, 'M_DIALSTATUS', null, false);
-    if (empty($DialStatus)) {
-        $DialStatus =$agi->get_variable('DIALSTATUS', true);
+    // M_DIALSTATUS в диалплане MikoPBX выставляется на MASTER_CHANNEL только когда
+    // на вызов реально ответил сотрудник. Читаем его функцией диалплана IMPORT (без AMI).
+    // Имя мастер-канала резолвим отдельным вызовом, чтобы не зависеть от раскрытия
+    // вложенного ${...} в AGI get_variable. DIALSTATUS — лишь запасной вариант
+    // (при переадресации в кастомный диалплан он может дать ложный ANSWER).
+    $validStatuses = ['ANSWER', 'NOANSWER', 'BUSY', 'CANCEL', 'CONGESTION', 'CHANUNAVAIL'];
+
+    $chan = $agi->get_variable('MASTER_CHANNEL(CHANNEL)', true);
+    if (!empty($chan)) {
+        $masterStatus = strtoupper((string)$agi->get_variable("IMPORT($chan,M_DIALSTATUS)", true));
+        if (in_array($masterStatus, $validStatuses, true)) {
+            return $masterStatus;
+        }
     }
 
-    return $DialStatus;
+    return $agi->get_variable('DIALSTATUS', true);
 }
 
 function numberAllow($agi, $ids, $number):bool

@@ -94,9 +94,11 @@ class ConnectorDB extends WorkerBase
         $this->cdrOffset     = (int)$settings->cdrOffset;
         $this->referenceDate = $settings->referenceDate;
 
+        // cdrCountDays хранит глубину анализа истории в ЧАСАХ (имя поля историческое).
+        // Здесь вычисляем дату-границу: записи cdr_responsible старше неё считаются неактуальными.
         $date = new DateTime();
         $date->modify('-'.(int)$settings->cdrCountDays.' hours');
-        $this->cdrCountDays = $date->format('Y-m-d H:i:s').PHP_EOL;
+        $this->cdrCountDays = $date->format('Y-m-d H:i:s');
         $this->disableIvr    = intval($settings->disableIvr) === 1;
         $this->simpleMode    = intval($settings->simpleMode) === 1;
     }
@@ -262,7 +264,7 @@ class ConnectorDB extends WorkerBase
                     'models'     => [
                         'CdrResponsible' => CdrResponsible::class,
                     ],
-                    'conditions' => 'CdrResponsible.phoneId = :phoneId: AND date > :cdrCountDays: AND CdrResponsible.typeCall = :typeCall',
+                    'conditions' => 'CdrResponsible.phoneId = :phoneId: AND date > :cdrCountDays: AND CdrResponsible.typeCall = :typeCall:',
                     'bind' => [
                         'phoneId'        => self::getPhoneIndex($phone),
                         'cdrCountDays'   => $this->cdrCountDays,
@@ -292,10 +294,11 @@ class ConnectorDB extends WorkerBase
                 'models'     => [
                     'CdrResponsible' => CdrResponsible::class,
                 ],
-                'conditions' => 'CdrResponsible.phoneId = :phoneId: AND typeCall = :typeCall:',
+                'conditions' => 'CdrResponsible.phoneId = :phoneId: AND typeCall = :typeCall: AND date > :cdrCountDays:',
                 'bind' => [
                     'phoneId'        => self::getPhoneIndex($phone),
                     'typeCall'       => $typeCall,
+                    'cdrCountDays'   => $this->cdrCountDays,
                 ],
                 'columns'    => [
                     'clientName' => 'CdrResponsible.number',

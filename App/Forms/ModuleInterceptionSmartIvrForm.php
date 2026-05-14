@@ -71,10 +71,11 @@ class ModuleInterceptionSmartIvrForm extends BaseForm
             'defaultValue' => 30,
         ]));
 
+        // cdrCountDays — глубина анализа истории звонков в ЧАСАХ (имя поля историческое).
         $this->add(new Numeric('cdrCountDays', [
             'maxlength'    => 2,
             'style'        => 'width: 80px;',
-            'defaultValue' => 5,
+            'defaultValue' => 60,
         ]));
 
         $checkAr = ['value' => null];

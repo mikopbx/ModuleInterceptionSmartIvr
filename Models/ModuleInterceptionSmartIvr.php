@@ -38,7 +38,9 @@ class ModuleInterceptionSmartIvr extends ModulesModelsBase
     public $cdrOffset = 1;
 
     /**
-     * Integer field example
+     * Глубина анализа истории звонков в ЧАСАХ.
+     * Имя поля историческое (Days), но значение трактуется и применяется как часы —
+     * см. ConnectorDB::updateSettings() и UI-метку mo_ModuleModuleInterceptionSmartIvr_cdrCountH.
      *
      * @Column(type="integer", default="60", nullable=true)
      */
