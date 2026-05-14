@@ -6,6 +6,6 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
-    'Modules\\ModuleTemplate\\' => array('/'),
+    'Modules\\ModuleInerceptionSmartIvr\\' => array('/'),
     'Cesargb\\Log\\' => array($vendorDir . '/cesargb/php-log-rotation/src'),
 );

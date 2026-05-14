@@ -63,16 +63,22 @@ class Logger
 
     public function rotate(): void
     {
-        $rotation = new Rotation([
-             'files' => 5,
-             'compress' => false,
-             'min-size' => 10*1024*1024,
-             'truncate' => false,
-             'catch' => function (RotationFailed $exception) {
-                Util::sysLogMsg('amoCRM-Log', $exception->getMessage());
-             },
-        ]);
-        $rotation->rotate($this->logFile);
+        // Сбой ротации (в т.ч. отсутствие зависимости cesargb/php-log-rotation)
+        // не должен ронять вызывающий воркер — иначе MikoPBX авто-отключит модуль.
+        try {
+            $rotation = new Rotation([
+                 'files' => 5,
+                 'compress' => false,
+                 'min-size' => 10*1024*1024,
+                 'truncate' => false,
+                 'catch' => function (RotationFailed $exception) {
+                    Util::sysLogMsg($this->module_name . '-Log', $exception->getMessage());
+                 },
+            ]);
+            $rotation->rotate($this->logFile);
+        } catch (\Throwable $e) {
+            Util::sysLogMsg($this->module_name . '-Log', 'Log rotation failed: ' . $e->getMessage());
+        }
     }
 
     public function writeError($data): void

@@ -7,22 +7,22 @@ namespace Composer\Autoload;
 class ComposerStaticInitdb0e7f5f4867f1094b5c4c69668744f9
 {
     public static $prefixLengthsPsr4 = array (
-        'M' => 
+        'M' =>
         array (
-            'Modules\\ModuleTemplate\\' => 23,
+            'Modules\\ModuleInerceptionSmartIvr\\' => 34,
         ),
-        'C' => 
+        'C' =>
         array (
             'Cesargb\\Log\\' => 12,
         ),
     );
 
     public static $prefixDirsPsr4 = array (
-        'Modules\\ModuleTemplate\\' => 
+        'Modules\\ModuleInerceptionSmartIvr\\' =>
         array (
             0 => '/',
         ),
-        'Cesargb\\Log\\' => 
+        'Cesargb\\Log\\' =>
         array (
             0 => __DIR__ . '/..' . '/cesargb/php-log-rotation/src',
         ),

@@ -2,7 +2,8 @@
     "name": "mikopbx/moduletemplate",
     "description": "ModuleInerceptionSmartIvr",
     "require": {
-        "mikopbx/core": ">=2023.2.160"
+        "mikopbx/core": ">=2023.2.160",
+        "cesargb/php-log-rotation": "^2.0"
     },
     "autoload": {
         "psr-4": {
