@@ -39,6 +39,7 @@ class ConnectorDB extends WorkerBase
 
     public const SAVE_USERS   = 'saveCrmUsers';
     public const GET_SETTINGS   = 'getSettings';
+    public const SAVE_SETTINGS   = 'saveSettings';
     public const SAVE_RESPONSIBLE   = 'saveResponsibleData';
     public const GET_RESPONSIBLE   = 'getResponsibleByPhone';
     public const DELETE_RESPONSIBLE   = 'deleteResponsibleData';
@@ -412,9 +413,10 @@ class ConnectorDB extends WorkerBase
      * @param string $function
      * @param array $args
      * @param bool $retVal
+     * @param int $timeout таймаут ожидания ответа воркера, сек.
      * @return array|bool|mixed
      */
-    public static function invoke(string $function, array $args = [], bool $retVal = true){
+    public static function invoke(string $function, array $args = [], bool $retVal = true, int $timeout = 20){
         $req = [
             'action'   => 'invoke',
             'function' => $function,
@@ -424,7 +426,7 @@ class ConnectorDB extends WorkerBase
         try {
             if($retVal){
                 $req['need-ret'] = true;
-                $result = $client->request(json_encode($req, JSON_THROW_ON_ERROR), 20);
+                $result = $client->request(json_encode($req, JSON_THROW_ON_ERROR), $timeout);
             }else{
                 $client->publish(json_encode($req, JSON_THROW_ON_ERROR));
                 return true;
@@ -509,6 +511,53 @@ class ConnectorDB extends WorkerBase
             $result = $result->toArray();
         }
         return $result;
+    }
+
+    /**
+     * Сохранение настроек модуля.
+     * Запись выполняется в процессе воркера, чтобы вся работа с SQLite шла из
+     * одного процесса (исключаем конкурентную запись из веб-процесса), и сразу
+     * обновляет кэш настроек воркера, не дожидаясь периодического ping (~1 мин).
+     * @param array $data поля настроек, уже подготовленные контроллером.
+     * @return PBXApiResult
+     */
+    public function saveSettings($data):PBXApiResult
+    {
+        $res = new PBXApiResult();
+        if(!is_array($data) || empty($data)){
+            $res->success = false;
+            $res->messages[] = 'saveSettings: empty or invalid settings payload';
+            $this->logger->writeError('saveSettings: empty or invalid settings payload');
+            return $res;
+        }
+        try {
+            $settings = ModuleInterceptionSmartIvr::findFirst();
+            if(!$settings){
+                $settings = new ModuleInterceptionSmartIvr();
+            }
+            foreach ($settings->toArray() as $key => $value){
+                if($key !== 'id' && array_key_exists($key, $data)){
+                    $settings->writeAttribute($key, $data[$key]);
+                }
+            }
+            $res->success = $settings->save();
+            if(!$res->success){
+                // Объекты Phalcon\Messages\Message не переживут unserialize() с
+                // ограничением allowed_classes в invoke() — приводим к строкам.
+                $errors = array_map('strval', $settings->getMessages());
+                $res->messages = $errors;
+                $this->logger->writeError('saveSettings: '.implode('; ', $errors));
+            }else{
+                $res->data = $settings->toArray();
+                // Воркер сразу подхватывает новые настройки в свой кэш.
+                $this->updateSettings();
+            }
+        } catch (\Throwable $e) {
+            $res->success = false;
+            $res->messages[] = $e->getMessage();
+            $this->logger->writeError('saveSettings: '.$e->getMessage());
+        }
+        return $res;
     }
 }
 

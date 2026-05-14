@@ -23,7 +23,9 @@ use MikoPBX\AdminCabinet\Providers\AssetProvider;
 use MikoPBX\Common\Models\Extensions;
 use MikoPBX\Common\Models\Providers;
 use MikoPBX\Modules\PbxExtensionUtils;
+use MikoPBX\PBXCoreREST\Lib\PBXApiResult;
 use Modules\ModuleInterceptionSmartIvr\App\Forms\ModuleInterceptionSmartIvrForm;
+use Modules\ModuleInterceptionSmartIvr\bin\ConnectorDB;
 use Modules\ModuleInterceptionSmartIvr\Models\ModuleInterceptionSmartIvr;
 
 class ModuleInterceptionSmartIvrController extends BaseController
@@ -133,7 +135,45 @@ class ModuleInterceptionSmartIvrController extends BaseController
             }
         }
 
-      $this->saveEntity($record);
+        // Если модуль включён — воркер ConnectorDB запущен; сохраняем через него,
+        // чтобы вся запись в SQLite шла из одного процесса и воркер сразу обновил
+        // свой кэш настроек. Если модуль выключен (воркера нет) или воркер не
+        // ответил — резервный путь: прямое сохранение через модель.
+        if (PbxExtensionUtils::isEnabled($this->moduleUniqueID)
+            && $this->saveViaConnector($record)) {
+            return;
+        }
+        // Сюда попадаем и при ошибке валидации в воркере (success=false): saveEntity()
+        // повторит save() в веб-процессе и покажет сообщения об ошибке в форме —
+        // воркер-путь их не отдаёт. Дублирования записи нет: при success=false воркер
+        // ничего не сохранил.
+        $this->saveEntity($record);
+    }
+
+    /**
+     * Пытается сохранить настройки через воркер ConnectorDB.
+     *
+     * @param ModuleInterceptionSmartIvr $record подготовленная запись настроек.
+     * @return bool true — сохранено воркером; false — воркер не ответил, нужен резервный путь.
+     */
+    private function saveViaConnector(ModuleInterceptionSmartIvr $record): bool
+    {
+        try {
+            // Короткий таймаут: если воркер не отвечает, быстро уходим на резервный путь.
+            $result = ConnectorDB::invoke(ConnectorDB::SAVE_SETTINGS, [$record->toArray()], true, 3);
+        } catch (\Throwable $e) {
+            // Сбой автозагрузки/вызова ConnectorDB в веб-процессе — уходим в резервный путь.
+            return false;
+        }
+        if (!$result instanceof PBXApiResult || !$result->success) {
+            return false;
+        }
+        if ($this->request->isAjax()) {
+            $this->view->success = true;
+        } else {
+            $this->flash->success($this->translation->_('ms_SuccessfulSaved'));
+        }
+        return true;
     }
 
     /**
