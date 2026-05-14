@@ -6,7 +6,7 @@
   "min_pbx_version": "2023.2.150",
   "release_settings": {
     "publish_release": true,
-    "changelog_enabled": true,
+    "changelog_enabled": false,
     "create_github_release": true
   }
 }
