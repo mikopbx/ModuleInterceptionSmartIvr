@@ -55,6 +55,10 @@ class HistoryParser
             ],
             'group'   => 'linkedid',
             'columns' => 'linkedid',
+            // Отбираем звонки строго по минимальному id (началу звонка). Без явной
+            // сортировки SQLite возвращает группы в произвольном порядке, и при
+            // достижении LIMIT (backlog) часть звонков «проваливается» мимо курсора.
+            'order'   => 'MIN(id)',
             'limit'   => self::LIMIT_CDR,
             'add_pack_query' => $add_query,
         ];
@@ -62,8 +66,18 @@ class HistoryParser
         $cdrData = CDRDatabaseProvider::getCdr($filter);
         $resultRows = [];
         $innerId = [];
+        // Для безопасного (без «дыр») сдвига курсора отслеживаем минимальный id
+        // каждого звонка пачки и максимальный id всей пачки. См. advanceOffset().
+        $minIdByLinkedId = [];
+        $maxPackId       = $offset;
         foreach ($cdrData as $cdr){
-            $offset = (int)$cdr['id'];
+            $rowId = (int)$cdr['id'];
+            if($rowId > $maxPackId){
+                $maxPackId = $rowId;
+            }
+            if(!isset($minIdByLinkedId[$cdr['linkedid']]) || $rowId < $minIdByLinkedId[$cdr['linkedid']]){
+                $minIdByLinkedId[$cdr['linkedid']] = $rowId;
+            }
             $srcInner = self::isInnerCdr($cdr, 'src', $maxLength);
             $dstInner = self::isInnerCdr($cdr, 'dst', $maxLength);
             if(($srcInner && $dstInner) || in_array($cdr['linkedid'], $innerId,true)){
@@ -89,7 +103,44 @@ class HistoryParser
             }
         }
 
+        self::advanceOffset($offset, $minIdByLinkedId, $maxPackId);
+
         return self::prepareFinalData($resultRows);
+    }
+
+    /**
+     * Безопасно сдвигает курсор обработки CDR (без пропуска звонков).
+     *
+     * Главный запрос выбирает не более LIMIT_CDR звонков (linkedid), упорядоченных
+     * по минимальному id, поэтому:
+     *  - если звонков меньше лимита — выбраны все новые, курсор можно двинуть до
+     *    максимального id пачки;
+     *  - если лимит достигнут (backlog) — остались необработанные звонки с бОльшим
+     *    id, и курсор двигаем только до максимального из МИНИМАЛЬНЫХ id выбранных
+     *    звонков. Это граница полностью обработанного окна: все невыбранные звонки
+     *    имеют минимальный id строго больше неё и будут забраны следующей пачкой.
+     *
+     * Прежняя логика двигала курсор до максимального id всей пачки, из-за чего на
+     * backlog'е звонки с промежуточными id «перепрыгивались» безвозвратно.
+     *
+     * @param int   $offset
+     * @param array $minIdByLinkedId linkedid => минимальный id строки звонка
+     * @param int   $maxPackId       максимальный id среди всех строк пачки
+     * @return void
+     */
+    private static function advanceOffset(int &$offset, array $minIdByLinkedId, int $maxPackId):void
+    {
+        if(empty($minIdByLinkedId)){
+            return;
+        }
+        if(count($minIdByLinkedId) < self::LIMIT_CDR){
+            $newOffset = $maxPackId;
+        }else{
+            $newOffset = max($minIdByLinkedId);
+        }
+        if($newOffset > $offset){
+            $offset = $newOffset;
+        }
     }
 
     /**

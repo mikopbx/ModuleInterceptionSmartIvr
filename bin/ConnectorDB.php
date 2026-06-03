@@ -457,15 +457,45 @@ class ConnectorDB extends WorkerBase
      */
     public function syncCdrData():void
     {
-        $oldOffset = $this->cdrOffset;
-        $cdrData = HistoryParser::getHistoryData($this->cdrOffset, $this->referenceDate);
-        foreach ($cdrData as $phoneId => $cdr){
-            $this->updateCdrResponsible($phoneId, $cdr);
-            $this->updateCdrResponsible($phoneId, $cdr, $cdr['type']??'');
+        // Любая ошибка чтения CDR/парсинга не должна ронять воркер: непойманное
+        // исключение приводит к авто-отключению модуля ядром MikoPBX.
+        try {
+            $oldOffset = $this->cdrOffset;
+            $cdrData = HistoryParser::getHistoryData($this->cdrOffset, $this->referenceDate);
+            foreach ($cdrData as $phoneId => $cdr){
+                $this->updateCdrResponsible($phoneId, $cdr);
+                $this->updateCdrResponsible($phoneId, $cdr, $cdr['type']??'');
+            }
+            // Курсор сохраняем только при сдвиге (как раньше) — save() модели
+            // настроек уведомляет backend об изменениях, поэтому не дёргаем его
+            // вхолостую.
+            if($oldOffset !== $this->cdrOffset){
+                $this->updateSettings($this->cdrOffset);
+            }
+            // Heartbeat пишем в файл, а не в модель настроек: запись модели через
+            // afterSave уведомляет backend (вплоть до регенерации конфигов), и делать
+            // это раз в минуту, в т.ч. в простой, нельзя. Файл перезаписывается на
+            // каждом успешном цикле и не растёт — по нему видно, что воркер жив и
+            // синхронизация идёт.
+            $this->writeHeartbeat();
+            if(!empty($cdrData)){
+                $this->logger->writeInfo('syncCdrData: processed '.count($cdrData).' numbers, offset='.$this->cdrOffset);
+            }
+        } catch (\Throwable $e) {
+            $this->logger->writeError('syncCdrData: '.$e->getMessage());
         }
-        if($oldOffset !== $this->cdrOffset){
-            $this->updateSettings($this->cdrOffset);
-        }
+    }
+
+    /**
+     * Записывает heartbeat последней успешной синхронизации в файл db/last_sync.
+     * Используется для обнаружения «молчаливого» простоя воркера. Ошибки записи
+     * подавляются — heartbeat не должен влиять на основную работу.
+     * @return void
+     */
+    private function writeHeartbeat():void
+    {
+        $payload = date('Y-m-d H:i:s').' offset='.$this->cdrOffset.PHP_EOL;
+        @file_put_contents(dirname(__DIR__).'/db/last_sync', $payload, LOCK_EX);
     }
 
     /**

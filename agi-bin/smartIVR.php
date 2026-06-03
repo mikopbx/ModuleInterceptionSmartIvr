@@ -118,7 +118,11 @@ $agi->set_variable('AGIEXITONHANGUP', 'yes');
 $agi->set_variable('AGISIGHUP', 'yes');
 $agi->set_variable('__ENDCALLONANSWER', 'yes');
 
-$settings = ConnectorDB::invoke(ConnectorDB::GET_SETTINGS, []);
+// Короткий таймаут вместо дефолтных 20 c: если воркер ConnectorDB недоступен
+// (мёртв/перезапускается), живой звонок не должен висеть до 20 c перед тем, как
+// уйти в штатную маршрутизацию. При здоровом воркере ответ приходит за мс.
+$workerTimeout = 5;
+$settings = ConnectorDB::invoke(ConnectorDB::GET_SETTINGS, [], true, $workerTimeout);
 if(empty($settings)){
     exit();
 }else{
@@ -129,7 +133,7 @@ if($number === 'asterisk'){
     $agi->verbose('Ignore call from CID asterisk');
     exit();
 }
-$result = ConnectorDB::invoke(ConnectorDB::GET_RESPONSIBLE, [$number, $settings->typeCallCdr]);
+$result = ConnectorDB::invoke(ConnectorDB::GET_RESPONSIBLE, [$number, $settings->typeCallCdr], true, $workerTimeout);
 
 $gotoFailDst = true;
 if(!$result){
