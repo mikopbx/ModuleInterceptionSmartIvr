@@ -36,14 +36,19 @@ class ModuleInterceptionSmartIvrForm extends BaseForm
     public function initialize($entity = null, $options = null) :void
     {
         $this->add(new Hidden('id', ['value' => $entity->id]));
+        // skipEscaping=true — IVR-тексты содержат плейсхолдеры <user>/<position>.
+        // Базовый addTextArea по умолчанию экранирует значение (escapeHtml), а Phalcon
+        // TextArea экранирует его ещё раз при рендере — двойное экранирование оседает
+        // в БД (<user> -> &lt;user&gt;) и ломает подстановку в smartIVR.php. Эти поля
+        // уходят в TTS через strip_tags, так что XSS-риска нет.
         $this->addTextArea('textIvr',$entity->textIvr??'',90,
-                           ['placeholder' => 'Введите текст основного IVR сообщения.']
+                           ['placeholder' => 'Введите текст основного IVR сообщения.', 'skipEscaping' => true]
         );
         $this->addTextArea('textInvalidNumber',$entity->textInvalidNumber??'',90,
-                           ['placeholder' => 'Введите текст сообщения для оповещения, что не верно набран номер.']
+                           ['placeholder' => 'Введите текст сообщения для оповещения, что не верно набран номер.', 'skipEscaping' => true]
         );
         $this->addTextArea('textNumberBusy',$entity->textNumberBusy??'',90,
-                           ['placeholder' => 'Введите текст сообщения для оповещения, что абонент сейчас разговаривает.']
+                           ['placeholder' => 'Введите текст сообщения для оповещения, что абонент сейчас разговаривает.', 'skipEscaping' => true]
         );
         $extension = new Select(
             'failover_extension', $options['extensions'], [

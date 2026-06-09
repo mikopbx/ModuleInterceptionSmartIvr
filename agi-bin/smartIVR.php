@@ -186,14 +186,20 @@ if(empty($settings->yandexApiKey) || $settings->disableIvr === '1'){
         exit(0);
     }
     $tts     = new YandexSynthesize(dirname(__DIR__)."/db/tts", $settings->yandexApiKey);
-    $textIvr = str_replace(['<user>', '<position>'],[$result->data[0]['name'], $result->data[0]['position']],$settings->textIvr);
+    // Раскрываем HTML-сущности на случай, если значение пришло экранированным
+    // (артефакт двойного экранирования формы: <user> мог сохраниться как &lt;user&gt;).
+    // Без этого str_replace не найдёт буквальные <user>/<position> и подстановка
+    // имени/должности не сработает, а strip_tags сущности не раскрывает.
+    $rawIvr  = html_entity_decode((string)$settings->textIvr, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $textIvr = str_replace(['<user>', '<position>'],[$result->data[0]['name'], $result->data[0]['position']],$rawIvr);
     $fullFilename = $tts->makeSpeechFromText(strip_tags($textIvr), 'ru-RU');
     if(!file_exists($fullFilename)){
         $agi->verbose('Failed to create an audio file');
         exit(3);
     }
     $agi->set_variable('M_FILENAME_IVR', Util::trimExtensionForFile($fullFilename));
-    $fullFilename = $tts->makeSpeechFromText(strip_tags($settings->textInvalidNumber), 'ru-RU');
+    $rawInvalid   = html_entity_decode((string)$settings->textInvalidNumber, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $fullFilename = $tts->makeSpeechFromText(strip_tags($rawInvalid), 'ru-RU');
     if(!file_exists($fullFilename)){
         $agi->verbose('UNKNOWN: Failed to create an audio file');
         exit(3);
